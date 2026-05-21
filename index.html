@@ -132,11 +132,11 @@
                         </div>
                         <div class="form-group">
                             <label>Latitude</label>
-                            <input type="number" step="any" id="latEstacao" required onchange="atualizarMapaPorInputs()">
+                            <input type="text" id="latEstacao" required onchange="atualizarMapaPorInputs()">
                         </div>
                         <div class="form-group">
                             <label>Longitude</label>
-                            <input type="number" step="any" id="lngEstacao" required onchange="atualizarMapaPorInputs()">
+                            <input type="text" id="lngEstacao" required onchange="atualizarMapaPorInputs()">
                         </div>
                     </div>
                     <button type="submit" class="btn-submit" id="btn-submit-text">💾 Salvar</button>
@@ -162,7 +162,6 @@
 <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-database-compat.js"></script>
 
 <script>
-    // Configurações do Banco de Dados
     const firebaseConfig = {
         apiKey: "AIzaSyDxjgpzMCz36d4g5q-WNnPONRT9sw99tUE",
         authDomain: "estac-3a649.firebaseapp.com",
@@ -177,11 +176,17 @@
     const rtdb = firebase.database();
     const auth = firebase.auth();
 
-    let map, marker;
+    let map, marker = null;
     let listaEstacoesLocais = [];
     const defaultCoords = [-23.5505, -46.6333];
 
-    // Monitora o estado da sessão
+    const greenIcon = L.divIcon({
+        className: 'custom-div-icon',
+        html: `<div style="background-color: #00A86B; width: 28px; height: 28px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.5);"></div>`,
+        iconSize: [28, 28],
+        iconAnchor: [14, 14]
+    });
+
     auth.onAuthStateChanged((user) => {
         if (user) {
             document.getElementById('login-screen').style.display = 'none';
@@ -193,7 +198,6 @@
         }
     });
 
-    // Função de Entrada
     function verificarLoginFirebase(event) {
         event.preventDefault();
         const email = document.getElementById('loginUser').value.trim();
@@ -212,7 +216,7 @@
                 btnText.innerText = "🔓 Entrar";
                 btnText.disabled = false;
                 console.error(error);
-                alert("Acesso negado! Verifique as credenciais de e-mail e senha configuradas.");
+                alert("Acesso negado! Verifique as credenciais.");
             });
     }
 
@@ -226,33 +230,35 @@
     document.addEventListener("DOMContentLoaded", () => {
         map = L.map('map-cadastro').setView(defaultCoords, 11);
         
-        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-            attribution: 'Tiles © Esri'
+        // MODIFICADO: lyrs=y ativa o Satélite do Google Maps com nomes de ruas e estabelecimentos comerciais comerciais
+        L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+            attribution: '© Google Maps',
+            maxZoom: 22
         }).addTo(map);
 
-        const greenIcon = L.divIcon({
-            className: 'custom-div-icon',
-            html: `<div style="background-color: #00A86B; width: 28px; height: 28px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.5);"></div>`,
-            iconSize: [28, 28],
-            iconAnchor: [14, 14]
-        });
-
-        marker = L.marker(defaultCoords, { icon: greenIcon, draggable: true }).addTo(map);
-
-        marker.on('dragend', function () {
-            const position = marker.getLatLng();
-            document.getElementById('latEstacao').value = position.lat.toFixed(6);
-            document.getElementById('lngEstacao').value = position.lng.toFixed(6);
-        });
+        redefinirMarcadorNoMapa(defaultCoords[0], defaultCoords[1]);
 
         map.on('click', function(e) {
-            marker.setLatLng(e.latlng);
-            document.getElementById('latEstacao').value = e.latlng.lat.toFixed(6);
-            document.getElementById('lngEstacao').value = e.latlng.lng.toFixed(6);
+            redefinirMarcadorNoMapa(e.latlng.lat, e.latlng.lng);
+            document.getElementById('latEstacao').value = e.latlng.lat.toFixed(7);
+            document.getElementById('lngEstacao').value = e.latlng.lng.toFixed(7);
         });
 
         ouvirEstacoesNoFirebase();
     });
+
+    function redefinirMarcadorNoMapa(lat, lng) {
+        if (marker) {
+            map.removeLayer(marker);
+        }
+        marker = L.marker([lat, lng], { icon: greenIcon, draggable: true }).addTo(map);
+
+        marker.on('dragend', function () {
+            const position = marker.getLatLng();
+            document.getElementById('latEstacao').value = position.lat.toFixed(7);
+            document.getElementById('lngEstacao').value = position.lng.toFixed(7);
+        });
+    }
 
     function ouvirEstacoesNoFirebase() {
         rtdb.ref('estacoes').on('value', (snapshot) => {
@@ -261,7 +267,7 @@
             if (dados) {
                 Object.keys(dados).forEach(key => {
                     if (dados[key]) {
-                        listaEstacoesLocais.push({ id: key, ...dados[key] });
+                        listaEstacoesLocais.push({ ...dados[key], id: key.toString() });
                     }
                 });
             }
@@ -311,12 +317,12 @@
                 const lat = parseFloat(data[0].lat);
                 const lon = parseFloat(data[0].lon);
 
-                document.getElementById('latEstacao').value = lat.toFixed(6);
-                document.getElementById('lngEstacao').value = lon.toFixed(6);
+                document.getElementById('latEstacao').value = lat.toFixed(7);
+                document.getElementById('lngEstacao').value = lon.toFixed(7);
 
-                const newLatLng = new L.LatLng(lat, lon);
-                marker.setLatLng(newLatLng);
-                map.flyTo(newLatLng, 17);
+                redefinirMarcadorNoMapa(lat, lon);
+                map.invalidateSize();
+                map.flyTo([lat, lon], 17);
             } else {
                 alert("Nenhum local encontrado.");
             }
@@ -326,18 +332,25 @@
     }
 
     function atualizarMapaPorInputs() {
-        const lat = parseFloat(document.getElementById('latEstacao').value);
-        const lng = parseFloat(document.getElementById('lngEstacao').value);
+        const latRaw = document.getElementById('latEstacao').value.replace(',', '.');
+        const lngRaw = document.getElementById('lngEstacao').value.replace(',', '.');
+        const lat = parseFloat(latRaw);
+        const lng = parseFloat(lngRaw);
+        
         if (!isNaN(lat) && !isNaN(lng)) {
-            const coords = new L.LatLng(lat, lng);
-            marker.setLatLng(coords);
-            map.panTo(coords);
+            redefinirMarcadorNoMapa(lat, lng);
+            map.flyTo([lat, lng], 17);
         }
     }
 
     function prepararEdicao(id) {
-        const estacao = listaEstacoesLocais.find(item => item.id === id);
-        if (!estacao) return;
+        const estacao = listaEstacoesLocais.find(item => item.id.toString() === id.toString());
+        if (!estacao) {
+            alert("Erro: Não foi possível mapear esta usina.");
+            return;
+        }
+
+        document.getElementById('cadastroForm').reset();
 
         document.getElementById('editStationId').value = estacao.id;
         document.getElementById('nomeEstacao').value = estacao.name || '';
@@ -348,19 +361,26 @@
         const senhaLimpa = (estacao.senha || estacao.senha_incluir || estacao["senha incluir"] || estacao["Senha Incluir"] || "").toString().trim();
         document.getElementById('senhaEstacao').value = senhaLimpa;
         
-        const lat = parseFloat(estacao.lat || estacao.latitude);
-        const lng = parseFloat(estacao.lng || estacao.longitude);
-        document.getElementById('latEstacao').value = lat;
-        document.getElementById('lngEstacao').value = lng;
+        document.getElementById('latEstacao').value = estacao.lat || estacao.latitude || '';
+        document.getElementById('lngEstacao').value = estacao.lng || estacao.longitude || '';
 
         document.getElementById('form-section-title').innerText = "✍️ Editando: " + estacao.name;
         document.getElementById('btn-submit-text').innerText = "🔄 Atualizar Dados";
         document.getElementById('btn-cancel-edit').style.display = 'block';
 
-        if (!isNaN(lat) && !isNaN(lng)) {
-            const coords = new L.LatLng(lat, lng);
-            marker.setLatLng(coords);
-            map.flyTo(coords, 17);
+        const latRaw = (estacao.lat || estacao.latitude || "").toString().replace(',', '.');
+        const lngRaw = (estacao.lng || estacao.longitude || "").toString().replace(',', '.');
+        const lat = parseFloat(latRaw);
+        const lng = parseFloat(lngRaw);
+
+        if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+            redefinirMarcadorNoMapa(lat, lng);
+            map.invalidateSize(); 
+            map.flyTo([lat, lng], 17);
+        } else {
+            const termoBusca = `${estacao.name}, ${estacao.municipio || ''}`;
+            document.getElementById('searchGeoInput').value = termoBusca;
+            buscarEndereco();
         }
     }
 
@@ -370,7 +390,7 @@
         document.getElementById('form-section-title').innerText = "Cadastrar Nova Estação";
         document.getElementById('btn-submit-text').innerText = "💾 Salvar";
         document.getElementById('btn-cancel-edit').style.display = 'none';
-        marker.setLatLng(defaultCoords);
+        redefinirMarcadorNoMapa(defaultCoords[0], defaultCoords[1]);
         map.setView(defaultCoords, 11);
     }
 
@@ -397,8 +417,9 @@
         const potencia = document.getElementById('potenciaEstacao').value.trim();
         const status = document.getElementById('statusEstacao').value;
         const senha = document.getElementById('senhaEstacao').value.trim().toString();
-        const lat = document.getElementById('latEstacao').value;
-        const lng = document.getElementById('lngEstacao').value;
+        
+        const lat = document.getElementById('latEstacao').value.trim().replace(',', '.');
+        const lng = document.getElementById('lngEstacao').value.trim().replace(',', '.');
 
         const dadosEstacao = {
             name: nome,
@@ -417,7 +438,7 @@
         };
 
         try {
-            if (id) {
+            if (id && id.trim() !== "") {
                 await rtdb.ref(`estacoes/${id}`).update(dadosEstacao);
                 alert(`Estação "${nome}" atualizada com sucesso!`);
                 cancelarEdicao();
